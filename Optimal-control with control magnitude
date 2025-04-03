@@ -1,0 +1,105 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Parameters
+L = 20.0
+N = 200
+dx = L / N
+dt = 0.005
+T = 10.0
+epsilon = 0.1
+v = 0.5
+q = np.ones(N)  # Weighting for state error
+r = 0.001       # Weighting for control effort (tuned)
+alpha = 0.0001  # Learning rate
+iterations = 50
+
+# Discretization
+x = np.linspace(-L/2, L/2, N)
+time_steps = int(T / dt)
+u = np.zeros((N, time_steps + 1))
+u_d = np.zeros((N, time_steps + 1))
+C = np.zeros((N, time_steps))
+
+# Initial conditions (adjusted to match desired state at t=0)
+u_s = 4 * np.arctan(np.exp(x / np.sqrt(1 - v**2)))
+u[:, 0] = u_s  # Match the initial condition with the desired state
+u[:, 1] = u[:, 0] + dt * (-np.sin(u[:, 0]) + epsilon * 0.1 * np.sin(2 * np.pi * x / L) + C[:, 0])
+
+# Desired solution (unperturbed kink)
+for n in range(time_steps + 1):
+    u_d[:, n] = 4 * np.arctan(np.exp((x - v * n * dt) / np.sqrt(1 - v**2)))
+
+# Perturbation function
+def P(u, x, t):
+    return 0.1 * np.sin(2 * np.pi * x / L) * np.cos(0.5 * t)
+
+# Cost function (Corrected - no extra dt)
+def cost_function(u, u_d, C, q, r, dt, dx):
+    return 0.5 * dt * dx * (np.sum(q[:, np.newaxis] * (u[:, :-1] - u_d[:, :-1])**2) + r * np.sum(C**2))
+
+# Optimization loop
+for k in range(iterations):
+    # Reset u for each iteration
+    u = np.zeros((N, time_steps + 1))
+    u[:, 0] = u_s  # Initial state matches desired state
+    u[:, 1] = u[:, 0] + dt * (-np.sin(u[:, 0]) + epsilon * P(u[:, 0], x, 0) + C[:, 0])
+
+    # Solve the state equation (forward in time)
+    for n in range(1, time_steps):
+        u_xx = np.zeros(N)
+        u_xx[1:-1] = (u[2:, n] - 2 * u[1:-1, n] + u[:-2, n]) / dx**2
+        u[0, n+1] = 0
+        u[-1, n+1] = 0
+        u[:, n+1] = 2 * u[:, n] - u[:, n-1] + dt**2 * (
+            u_xx - np.sin(u[:, n]) + epsilon * P(u[:, n], x, n * dt) + C[:, n])
+
+    # Solve the adjoint equation (backward in time)
+    lam = np.zeros((N, time_steps + 1))
+    lam[:, -1] = 0
+    lam[:, -2] = 0
+    for n in range(time_steps - 2, -1, -1):
+        lam_xx = np.zeros(N)
+        lam_xx[1:-1] = (lam[2:, n+1] - 2 * lam[1:-1, n+1] + lam[:-2, n+1]) / dx**2
+        lam[0, n] = 0
+        lam[-1, n] = 0
+        lam[:, n] = 2 * lam[:, n+1] - lam[:, n+2] + dt**2 * (
+            lam_xx + np.cos(u[:, n+1]) * lam[:, n+1] + q * (u[:, n+1] - u_d[:, n+1]))
+
+    # Calculate the gradient of J with respect to C
+    grad_C = r * C + dt**2 * lam[:, :-1]
+
+    # Skip control updates for t=0 to prevent unnecessary dips
+    C[:, 1:] = C[:, 1:] - alpha * grad_C[:, 1:]
+
+    # Calculate the cost
+    J = cost_function(u, u_d, C, q, r, dt, dx)
+    print(f"Iteration {k+1}, Cost: {J}")
+
+# Plotting the controlled solution (last iteration)
+plt.figure(figsize=(10, 6))
+for n in range(0, time_steps, int(0.5 / dt)):  # Plot less frequently
+    plt.plot(x, u[:, n], label=f"t={n*dt:.2f}")
+plt.xlabel("x", fontsize=16)
+plt.ylabel("u(x, t)", fontsize=16)
+plt.title("Optimal Control", fontsize=16)
+plt.xticks(fontsize=16)  # Increase x-axis tick size
+plt.yticks(fontsize=16)  # Increase y-axis tick size
+plt.legend(fontsize=12)
+plt.grid(True)
+plt.savefig(r'C:\Users\Ohemeng\Desktop\NewFolder-2\Controlled_Solution.pdf')
+plt.show()
+
+# Plotting the control magnitude (last iteration)
+plt.figure(figsize=(10, 6))
+for n in range(1, time_steps, int(0.5 / dt)):
+    plt.plot(x, C[:, n], label=f"t={n*dt:.2f}")
+plt.xlabel("x", fontsize=16)
+plt.ylabel("C(x, t)", fontsize=14)
+plt.title("Control magnitude", fontsize=16)
+plt.xticks(fontsize=16)  # Increase x-axis tick size
+plt.yticks(fontsize=12)  # Increase y-axis tick size
+plt.legend(fontsize=11)
+#plt.grid(True)
+plt.savefig(r'C:\Users\Ohemeng\Desktop\NewFolder-2\Control_Magnitude.pdf')
+plt.show()
