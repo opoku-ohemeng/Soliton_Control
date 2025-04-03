@@ -62,9 +62,9 @@ for i, times in enumerate(times_to_plot):
     ax.set_title(f" {labels[i]}", fontsize=16)
     ax.set_xlabel("x", fontsize=18)
     ax.set_ylabel("u(x, t)", fontsize=18)
-    ax.legend(fontsize=10)
-    plt.xticks(fontsize=16)  # Increase x-axis tick size
-    plt.yticks(fontsize=12)  # Increase y-axis tick size
+    ax.legend(fontsize=12)
+    ax.tick_params(axis='x', labelsize=16)  # Correct function for x-axis tick size
+    ax.tick_params(axis='y', labelsize=16)  # Correct function for y-axis tick size
     #ax.grid(True)
 
 # Adjust layout and save the figure
